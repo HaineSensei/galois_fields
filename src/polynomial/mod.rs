@@ -1,37 +1,61 @@
 
 use std::{collections::HashMap, ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign}};
 
-use crate::{Ring, Variable};
+use crate::{Indeterminate, Ring};
 
-trait NotHighDepthPolynomial {}
-
-struct Polynomial<R: Ring + NotHighDepthPolynomial, Var: Variable>
+pub struct Polynomial<R: Ring, const VAR: Indeterminate>
 where
     for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
     vals: HashMap<usize,R>,
-    variable: Var
 }
 
-impl<R,V> Clone for Polynomial<R, V>
-where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
+impl<R,const VAR: Indeterminate> Polynomial<R,VAR> 
+where
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
-    fn clone(&self) -> Self {
-        Self { vals: self.vals.clone(), variable: self.variable.clone() }
+    pub fn new(vals: &HashMap<usize,R>) -> Self {
+        Self {
+            vals: vals.iter().filter_map(|(x,y)|
+                if y != &R::zero() {
+                    Some((*x, y.clone()))
+                } else {
+                    None
+                }
+            ).collect()
+        }
+    }
+
+    fn prune_zeros(&mut self) {
+        let Self {vals} = self;
+        let keys = vals.keys().cloned().collect::<Vec<_>>();
+        for x in keys {
+            if vals.get(&x) == Some(&R::zero()) {
+                vals.remove(&x);
+            }
+        }
     }
 }
 
-impl<'a, 'b, R, V> Add<&'b Polynomial<R,V>> for &'a Polynomial<R,V>
+impl<R,const VAR: Indeterminate> Clone for Polynomial<R, VAR>
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
-    for<'c, 'd> &'c R : Add<&'d R, Output = R>
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
-    type Output = Polynomial<R, V>;
+    fn clone(&self) -> Self {
+        Self::new(&self.vals)
+    }
+}
 
-    fn add(self, rhs: &'b Polynomial<R,V>) -> Self::Output
+impl<'a, 'b, R, const VAR: Indeterminate> Add<&'b Polynomial<R,VAR>> for &'a Polynomial<R,VAR>
+where 
+    R: Ring,
+    for<'c, 'd> &'c R : Add<&'d R, Output = R> + Mul<&'d R, Output = R> + Sub<&'d R, Output = R> + Neg<Output = R>
+{
+    type Output = Polynomial<R, VAR>;
+
+    fn add(self, rhs: &'b Polynomial<R,VAR>) -> Self::Output
     {
         let mut vals = self.vals.clone();
         for (i, x) in &rhs.vals {
@@ -44,18 +68,14 @@ where
                 },
             }
         }
-        Self::Output {
-            vals,
-            variable: self.variable.clone(),
-        }
+        Self::Output::new(&vals)
     }
 }
 
-impl<R, V> Add for Polynomial<R,V>
+impl<R, const VAR: Indeterminate> Add for Polynomial<R,VAR>
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
-    for<'a, 'b> &'a R : Add<&'b R, Output = R>
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
     type Output = Self;
 
@@ -64,15 +84,14 @@ where
     }
 }
 
-impl<'c,'d, R,V> Mul<&'c Polynomial<R,V>> for &'d Polynomial<R,V> 
+impl<'c,'d, R, const VAR: Indeterminate> Mul<&'c Polynomial<R,VAR>> for &'d Polynomial<R,VAR> 
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
-    for<'a, 'b> &'a R : Mul<&'b R, Output = R>
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
-    type Output = Polynomial<R, V>;
+    type Output = Polynomial<R, VAR>;
 
-    fn mul(self, rhs: &'c Polynomial<R,V>) -> Self::Output {
+    fn mul(self, rhs: &'c Polynomial<R,VAR>) -> Self::Output {
         let mut vals = HashMap::new();
         for (i, x) in &self.vals {
             for (j, y) in &rhs.vals {
@@ -87,18 +106,14 @@ where
             }
         }
 
-        Self::Output {
-            vals,
-            variable: self.variable.clone()
-        }
+        Self::Output::new(&vals)
     }
 }
 
-impl<R,V> Mul for Polynomial<R,V>
+impl<R,const VAR: Indeterminate> Mul for Polynomial<R,VAR>
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
-    for<'a, 'b> &'a R : Mul<&'b R, Output = R>
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
     type Output = Self;
 
@@ -107,28 +122,23 @@ where
     }
 }
 
-impl<R,V> Neg for &Polynomial<R,V> 
+impl<R,const VAR: Indeterminate> Neg for &Polynomial<R,VAR> 
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
-    for<'a> &'a R : Neg<Output = R>
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
-    type Output = Polynomial<R,V>;
+    type Output = Polynomial<R,VAR>;
 
     fn neg(self) -> Self::Output {
         let vals = self.vals.iter().map(|(x,y)| (*x, -y)).collect();
-        Self::Output {
-            vals,
-            variable: self.variable.clone()
-        }
+        Self::Output::new(&vals)
     }
 }
 
-impl<R,V> Neg for Polynomial<R,V> 
+impl<R,const VAR: Indeterminate> Neg for Polynomial<R,VAR> 
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
-    for<'a> &'a R : Neg<Output = R>
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
     type Output = Self;
 
@@ -137,24 +147,22 @@ where
     }
 }
 
-impl<'c,'d,R,V> Sub<&'c Polynomial<R,V>> for &'d Polynomial<R, V> 
+impl<'c,'d,R,const VAR: Indeterminate> Sub<&'c Polynomial<R,VAR>> for &'d Polynomial<R, VAR> 
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
-    for<'a, 'b> &'a R : Sub<&'b R, Output = R>
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
-    type Output = Polynomial<R,V>;
+    type Output = Polynomial<R,VAR>;
 
-    fn sub(self, rhs: &'c Polynomial<R,V>) -> Self::Output {
+    fn sub(self, rhs: &'c Polynomial<R,VAR>) -> Self::Output {
         self + &-rhs
     }
 }
 
-impl<R,V> Sub for Polynomial<R, V> 
+impl<R,const VAR: Indeterminate> Sub for Polynomial<R, VAR> 
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
-    for<'a, 'b> &'a R : Sub<&'b R, Output = R>
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
     type Output = Self;
 
@@ -163,10 +171,10 @@ where
     }
 }
 
-impl<R,V> AddAssign for Polynomial<R,V>
+impl<R,const VAR: Indeterminate> AddAssign for Polynomial<R,VAR>
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
     fn add_assign(&mut self, rhs: Self) {
         for (i, x) in &rhs.vals {
@@ -179,32 +187,89 @@ where
                 },
             }
         }
+        self.prune_zeros();
     }
 }
 
-impl<R,V> MulAssign for Polynomial<R,V>
+impl<R,const VAR: Indeterminate> MulAssign for Polynomial<R,VAR>
 where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
     fn mul_assign(&mut self, rhs: Self) {
-        self.vals = (self.clone()*rhs).vals
+        self.vals = (self.clone()*rhs).vals;
     }
 }
 
-impl<R,V> SubAssign for Polynomial<R,V>
+impl<R,const VAR: Indeterminate> SubAssign for Polynomial<R,VAR>
 where
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {
     fn sub_assign(&mut self, rhs: Self) {
         *self += -rhs;
     }
 }
 
-impl<R, V> Ring for Polynomial<R, V>
-where 
-    R: Ring + NotHighDepthPolynomial,
-    V: Variable,
-    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+impl<'a, R,const VAR: Indeterminate> SubAssign<&'a Polynomial<R,VAR>> for Polynomial<R,VAR>
+where
+    R: Ring,
+    for<'c, 'b> &'c R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+{
+    fn sub_assign(&mut self, rhs: &'a Polynomial<R,VAR>) {
+        *self += -rhs;
+    }
+}
+
+impl<'a, R,const VAR: Indeterminate> AddAssign<&'a Polynomial<R,VAR>> for Polynomial<R,VAR>
+where
+    R: Ring,
+    for<'c, 'b> &'c R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+{
+    fn add_assign(&mut self, rhs: &'a Polynomial<R,VAR>) {
+        *self = &self.clone() + rhs;
+    }
+}
+
+impl<'a, R,const VAR: Indeterminate> MulAssign<&'a Polynomial<R,VAR>> for Polynomial<R,VAR>
+where
+    R: Ring,
+    for<'c, 'b> &'c R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+{
+    fn mul_assign(&mut self, rhs: &'a Polynomial<R,VAR>) {
+        *self = &self.clone() * rhs;
+    }
+}
+
+impl<R, const VAR: Indeterminate> PartialEq for Polynomial<R, VAR>
+where
+    R: Ring,
+    for<'c, 'b> &'c R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+{
+    fn eq(&self, other: &Self) -> bool {
+        // TODO: Check that `self.vals` and `other.vals` are forced to be "pruned" already.
+        self.vals == other.vals
+    }
+}
+
+impl<R, const VAR: Indeterminate> Eq for Polynomial<R, VAR>
+where
+    R: Ring,
+    for<'c, 'b> &'c R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
 {}
+
+impl<R, const VAR: Indeterminate> Ring for Polynomial<R, VAR>
+where 
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+{
+    fn zero() -> Self {
+        Self::new(&HashMap::new())
+    }
+
+    fn one() -> Self {
+        let mut hash_map = HashMap::new();
+        hash_map.insert(0,R::one());
+        Self::new(&hash_map)
+    }
+}
