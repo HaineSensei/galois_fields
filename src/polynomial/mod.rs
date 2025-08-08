@@ -436,3 +436,6 @@ where
         &self % &rhs
     }
 }
+
+#[cfg(test)]
+mod test;

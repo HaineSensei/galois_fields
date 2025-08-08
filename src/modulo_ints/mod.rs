@@ -2,7 +2,7 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign, Neg, Div, DivAssi
 
 use crate::{Field, Ring};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct IMod<const BASE: u64> {
     val: u128
 }
@@ -197,3 +197,6 @@ impl<'a, 'b, const BASE: u64> Div<&'b IMod<BASE>> for &'a IMod<BASE> {
 impl<const BASE: u64> Field for IMod<BASE> {
     
 }
+
+#[cfg(test)]
+mod test;
