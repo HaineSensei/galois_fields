@@ -6,6 +6,7 @@ use std::marker::ConstParamTy;
 pub mod polynomial;
 pub mod modulo_ints;
 pub mod tools;
+pub mod galois;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ConstParamTy)]
 pub struct Indeterminate {

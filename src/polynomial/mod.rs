@@ -1,8 +1,9 @@
 
-use std::{collections::HashMap, ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign}};
+use std::{collections::HashMap, ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Rem, Sub, SubAssign}};
 
-use crate::{Indeterminate, Ring};
+use crate::{Field, Indeterminate, Ring};
 
+#[derive(Debug)]
 pub struct Polynomial<R: Ring, const VAR: Indeterminate>
 where
     for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
@@ -271,5 +272,167 @@ where
         let mut hash_map = HashMap::new();
         hash_map.insert(0,R::one());
         Self::new(&hash_map)
+    }
+}
+
+impl<R, const VAR: Indeterminate> Polynomial<R, VAR> 
+where 
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+{
+    pub fn deg(&self) -> Option<usize> {
+        self.vals.keys().max().cloned()
+    }
+
+    pub fn leading<'a>(&'a self) -> Option<&'a R> {
+        self.vals.get(&self.deg()?)
+    }
+
+    pub fn indeterminant_power(pow:usize) -> Self {
+        let mut hash_map = HashMap::new();
+        hash_map.insert(pow,R::one());
+        Self::new(&hash_map)
+    }
+}
+
+impl<'c, 'd, R, const VAR: Indeterminate> Mul<&'c R> for &'d Polynomial<R, VAR> 
+where 
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+{
+    type Output = Polynomial<R, VAR>;
+
+    fn mul(self, rhs: &'c R) -> Self::Output {
+        Self::Output::new(&self.vals.iter().map(|(&x,y)| (x, y*rhs)).collect())
+    }
+}
+
+impl<'d, R, const VAR: Indeterminate> Mul<R> for &'d Polynomial<R, VAR> 
+where 
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+{
+    type Output = Polynomial<R, VAR>;
+
+    fn mul(self, rhs: R) -> Self::Output {
+        Self::Output::new(&self.vals.iter().map(|(&x,y)| (x, y*&rhs)).collect())
+    }
+}
+
+impl<'c, 'd, R, const VAR: Indeterminate> Div<&'c R> for &'d Polynomial<R, VAR> 
+where 
+    R: Field,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R> + Div<&'b R, Output = R>
+{
+    type Output = Polynomial<R, VAR>;
+
+    fn div(self, rhs: &'c R) -> Self::Output {
+        Self::Output::new(&self.vals.iter().map(|(&x,y)| (x, y/rhs)).collect())
+    }
+}
+
+impl<'d, R, const VAR: Indeterminate> Div<R> for &'d Polynomial<R, VAR> 
+where 
+    R: Field,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R> + Div<&'b R, Output = R>
+{
+    type Output = Polynomial<R, VAR>;
+
+    fn div(self, rhs: R) -> Self::Output {
+        Self::Output::new(&self.vals.iter().map(|(&x,y)| (x, y/&rhs)).collect())
+    }
+}
+
+impl<'c, 'd, R, const VAR: Indeterminate> Div<&'c Polynomial<R, VAR>> for &'d Polynomial<R, VAR>
+where 
+    R: Field,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R> + Div<&'b R, Output = R>
+{
+    type Output = Polynomial<R, VAR>;
+
+    fn div(self, rhs: &'c Polynomial<R, VAR>) -> Self::Output {
+        let mut out = Self::Output::zero();
+        let mut curr = self.clone();
+        let mut curr_deg = match curr.deg() {
+            Some(x) => x,
+            None => return out,
+        };
+        let rhs_deg = rhs.deg().expect("Hey, stop trying to divide by zero!");
+        while curr_deg >= rhs_deg {
+            let curr_leading = curr.leading().expect("er... shouldn't this be impossible to get to?");
+            let rhs_leading = rhs.leading().expect("Again, this should be impossible to get to.");
+            let factor = Polynomial::indeterminant_power(curr_deg-rhs_deg) * (curr_leading/rhs_leading);
+            let rhs_multiple = rhs*&factor;
+            assert_eq!(rhs_multiple.deg(),curr.deg());
+            curr -= rhs_multiple;
+            out += factor;
+            curr_deg = match curr.deg() {
+                Some(x) => x,
+                None => return out,
+            };
+        }
+        out
+    }
+}
+
+impl<'c, 'd, R, const VAR: Indeterminate> Rem<&'c Polynomial<R, VAR>> for &'d Polynomial<R, VAR>
+where 
+    R: Field,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R> + Div<&'b R, Output = R>
+{
+    type Output = Polynomial<R, VAR>;
+
+    fn rem(self, rhs: &'c Polynomial<R, VAR>) -> Self::Output {
+        let x = self/rhs;
+        self - &(&x*rhs)
+        // self - (self/rhs)*rhs
+    }
+}
+
+impl<R, const VAR: Indeterminate> Mul<R> for Polynomial<R, VAR> 
+where 
+    R: Ring,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R>
+{
+    type Output = Self;
+
+    fn mul(self, rhs: R) -> Self::Output {
+        &self * rhs
+    }
+}
+
+impl<R, const VAR: Indeterminate> Div<R> for Polynomial<R, VAR> 
+where 
+    R: Field,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R> + Div<&'b R, Output = R>
+{
+    type Output = Self;
+
+    fn div(self, rhs: R) -> Self::Output {
+        &self / rhs
+    }
+}
+
+impl<R, const VAR: Indeterminate> Div<Polynomial<R, VAR>> for Polynomial<R, VAR>
+where 
+    R: Field,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R> + Div<&'b R, Output = R>
+{
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        &self / &rhs
+    }
+}
+
+impl<R, const VAR: Indeterminate> Rem<Polynomial<R, VAR>> for Polynomial<R, VAR>
+where 
+    R: Field,
+    for<'a, 'b> &'a R : Add<&'b R, Output = R> + Mul<&'b R, Output = R> + Sub<&'b R, Output = R> + Neg<Output = R> + Div<&'b R, Output = R>
+{
+    type Output = Self;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        &self % &rhs
     }
 }
